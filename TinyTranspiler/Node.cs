@@ -4,13 +4,22 @@ using System.Linq;
 using System.Text;
 
 namespace TinyTranspiler {
+	/// <summary>
+	/// Represents a single node in the abstract syntax tree.
+	/// 
+	/// Statements, expressions, operators are all nodes.
+	/// </summary>
 	public class Node {
 		public Token.Pos pos;
+
 		public virtual bool isStatement() => false;
+
 		public virtual bool isSettable() => false;
+
 		public Node(Token.Pos tp) {
 			pos = tp;
 		}
+
 		public virtual void print(Printer printer, Printer.Flags flags) {
 			throw new NotImplementedException();
 		}
@@ -29,25 +38,39 @@ namespace TinyTranspiler {
 		}
 		/// Should call fn with each of inner nodes, stopping if any return `true`.
 		protected virtual bool seekRec(SeekFunc fn, List<Node> st) => false;
+
+		/// <summary><para>
+		/// Calls `fn` for each sub-node (in order of their appearance in source code),
+		/// short-circuits and returns `true` if the function returns `true` for any node.
+		/// </para><para>
+		/// If provided, `st` maintains a stack/history of nested nodes, allowing to check for parents in `fn`
+		/// </para></summary>
 		public bool seek(SeekFunc fn, List<Node> st = null) {
 			if (st != null) st.Insert(0, this);
 			var result = seekRec(fn, st);
 			if (st != null) st.RemoveAt(0);
 			return result;
 		}
-		//
+		
 		public delegate void IterFunc(ref Node node, List<Node> st);
+
+		/// <summary><para>
+		/// Calls `fn` for each sub-node (in order of their appearance in source code).
+		/// </para><para>
+		/// If provided, `st` maintains a stack/history of nested nodes, allowing to check for parents in `fn`
+		/// </para></summary>
 		public virtual void iter(IterFunc fn, List<Node> st = null) {
 			seek((ref Node node, List<Node> st) => {
 				fn(ref node, st);
 				return false;
 			}, st);
 		}
-		//
+		
 		public override string ToString() {
 			return $"{pos} {base.ToString()}";
 		}
-		//
+		
+
 		public class Literal : Node {
 			public string value;
 			public Literal(Token.Pos tp, string value) : base(tp) { this.value = value; }

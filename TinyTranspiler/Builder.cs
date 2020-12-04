@@ -18,16 +18,17 @@ namespace TinyTranspiler {
 			script = new Script(source.name, node);
 			scripts = new List<Script>() { script };
 		}
-		[Flags] enum BuildExprFlags {
-			None = 0,
-			NoBinOps = 1,
-			NoSuffixes = 2,
-			AsStatement = 4,
-		}
-		//
+		
+		/// <summary>
+		/// Forms you an "Expected X, got Y" exception, ready to throw.
+		/// </summary>
 		Exception expect(string what, Token got) {
 			return new Exception($"Expected {what}, got {got}");
 		}
+
+		/// <summary>
+		/// Skips the current token if it is T.
+		/// </summary>
 		bool skipIf<T>() where T : Token {
 			var tk = tokens[pos];
 			if (tk is T) {
@@ -35,6 +36,10 @@ namespace TinyTranspiler {
 				return true;
 			} else return false;
 		}
+
+		/// <summary>
+		/// Skips the current token if it is T and passes the test.
+		/// </summary>
 		bool skipIf<T>(Func<T, bool> fn) where T : Token {
 			var tk = tokens[pos];
 			if (tk is T t && fn(t)) {
@@ -42,13 +47,24 @@ namespace TinyTranspiler {
 				return true;
 			} else return false;
 		}
+
+		/// <summary>
+		/// Skips the current token if it is T, throws an error otherwise.
+		/// </summary>
 		void skipReq<T>(string what) where T : Token {
 			if (!skipIf<T>()) throw expect(what, tokens[pos]);
 		}
+
+		/// <summary>
+		/// Skips the current token if it is T and passes the test, throws an error otherwise.
+		/// </summary>
 		void skipReq<T>(string what, Func<T, bool> fn) where T : Token {
 			if (!skipIf(fn)) throw expect(what, tokens[pos]);
 		}
-		//
+		
+		/// <summary>
+		/// Reads a chain of binary ooperators and merges them based on priority.
+		/// </summary>
 		Node buildBinOps(Token.Pos firstPos, Node firstNode, Token.BinOpType firstType) {
 			List<Node> nodes = new List<Node>() { firstNode };
 			List<Token.BinOpType> ops = new List<Token.BinOpType>() { firstType };
@@ -89,6 +105,10 @@ namespace TinyTranspiler {
 			//
 			return nodes[0];
 		}
+
+		/// <summary>
+		/// Reads arguments for function calls and array literals, up and after the closing token.
+		/// </summary>
 		void buildCallArgs(Token.Pos start, List<Node> args, bool square) {
 			var wantComma = false;
 			while (pos < len) {
@@ -114,6 +134,14 @@ namespace TinyTranspiler {
 			var kind = square ? "[]" : "()";
 			throw new Exception($"Unclosed {kind} starting at {start}");
 		}
+
+		[Flags] enum BuildExprFlags {
+			None = 0,
+			NoBinOps = 1,
+			NoSuffixes = 2,
+			AsStatement = 4,
+		}
+
 		Node buildExprImpl(BuildExprFlags flags = BuildExprFlags.None) {
 			var tk = tokens[pos++];
 			var tp = tk.pos;
@@ -122,18 +150,18 @@ namespace TinyTranspiler {
 				case Token.Number n: return new Node.Number(tp, n.value);
 				case Token.CString s: return new Node.CString(tp, s.value);
 				case Token.Ident id: return new Node.Ident(tp, id.value);
-				case Token.ParOpen:
+				case Token.ParOpen: // (val)
 					node = buildExpr();
 					skipReq<Token.ParClose>("a closing `)`");
 					return node;
-				case Token.SquareOpen:
+				case Token.SquareOpen: // [v1, v2, v3]
 					var arr = new Node.ArrayLiteral(tp);
 					buildCallArgs(tp, arr.values, true);
 					return arr;
-				case Token.BinOp minus when minus.type == Token.BinOpType.Subtract:
+				case Token.BinOp minus when minus.type == Token.BinOpType.Subtract: // -val
 					node = buildExpr(BuildExprFlags.NoBinOps);
 					return new Node.UnOp(tp, Token.UnOpType.Negate, node);
-				case Token.UnOp unop:
+				case Token.UnOp unop: // ~val, !val
 					node = buildExpr(BuildExprFlags.NoBinOps);
 					return new Node.UnOp(tp, unop.type, node);
 				default:
@@ -141,6 +169,10 @@ namespace TinyTranspiler {
 					throw expect(kind, tk);
 			}
 		}
+
+		/// <summary>
+		/// Reads an expression - either inline or inline-as-statement (like `func()`)
+		/// </summary>
 		Node buildExpr(BuildExprFlags flags = BuildExprFlags.None) {
 			var node = buildExprImpl(flags);
 			bool hasFlag(BuildExprFlags flag) => (flags & flag) == flag;
@@ -179,18 +211,19 @@ namespace TinyTranspiler {
 			}
 			return node;
 		}
+
 		Node buildStatementImpl() {
 			var tk = tokens[pos++];
 			var tp = tk.pos;
 			switch (tk) {
-				case Token.CurlyOpen:
+				case Token.CurlyOpen: // {}
 					var block = new Node.Block(tp);
 					while (pos < len) {
 						if (skipIf<Token.CurlyClose>()) return block;
 						block.nodes.Add(buildStatement());
 					}
 					throw new Exception("Unclosed {} starting at " + tp);
-				case Token.Keyword kw when kw.word == "if":
+				case Token.Keyword kw when kw.word == "if": // if val [then] stat [else stat]
 					var @if = buildExpr();
 					skipIf((Token.Keyword kw) => kw.word == "then");
 					var @then = buildStatement();
@@ -199,9 +232,9 @@ namespace TinyTranspiler {
 						@else = buildStatement();
 					} else @else = null;
 					return new Node.If(tp, @if, then, @else);
-				case Token.Keyword kw when kw.word == "exit":
+				case Token.Keyword kw when kw.word == "exit": // exit
 					return new Node.Return(tp, null);
-				case Token.Keyword kw when kw.word == "return":
+				case Token.Keyword kw when kw.word == "return": // return [val]
 					Node retNode;
 					switch (tokens[pos]) {
 						case Token.Keyword:
@@ -213,7 +246,7 @@ namespace TinyTranspiler {
 							break;
 					}
 					return new Node.Return(tp, retNode);
-				case Token.Keyword kw when kw.word == "var":
+				case Token.Keyword kw when kw.word == "var": // var name[= val][, name2[= val2]]
 					var varBlock = new Node.Block(tp);
 					var loop = true;
 					while (loop && pos < len) {
@@ -233,7 +266,7 @@ namespace TinyTranspiler {
 						varBlock.nodes.Add(varNode);
 					}
 					return varBlock.nodes.Count != 1 ? varBlock : varBlock.nodes[0];
-				case Token.Keyword kw when kw.word == "for":
+				case Token.Keyword kw when kw.word == "for": // for (init; cond; post) loop
 					skipReq<Token.ParOpen>("an opening parenthesis in for");
 					var init = buildStatement();
 					var cond = buildExpr();
@@ -242,11 +275,11 @@ namespace TinyTranspiler {
 					skipReq<Token.ParClose>("a closing parenthesis in for");
 					var forNode = buildStatement();
 					return new Node.For(tp, init, cond, post, forNode);
-				case Token.Keyword kw when kw.word == "while":
+				case Token.Keyword kw when kw.word == "while": // while cond stat
 					var whileCond = buildExpr();
 					var whileStat = buildStatement();
 					return new Node.While(tp, whileCond, whileStat);
-				case Token.Keyword kw when kw.word == "do":
+				case Token.Keyword kw when kw.word == "do": // do stat while cond
 					var doStat = buildStatement();
 					skipReq("a `while` in do-while", (Token.Keyword w) => w.word == "while");
 					var doCond = buildExpr();
@@ -263,9 +296,14 @@ namespace TinyTranspiler {
 		}
 		Node buildStatement() {
 			var node = buildStatementImpl();
+			// consume subsequent semicolons:
 			while (pos < len && tokens[pos] is Token.Semico) pos++;
 			return node;
 		}
+
+		/// <summary>
+		/// Reads statements and adds them to the top-level node until end-of-file is reached.
+		/// </summary>
 		public void build() {
 			while (pos < len) {
 				if (tokens[pos] is Token.EOF) break;

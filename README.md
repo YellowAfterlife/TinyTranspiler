@@ -20,6 +20,18 @@ It supports a rather arbitrary set of syntactic constructs, such as:
 - `return value`, `return;`, `exit`
 - Other things that I'll forget to add here.
 
+Sample snippet:
+```js
+// hi!
+var arr = [1, 2, 3, 4, "hi!\nhello!"];
+for (var i = 0; i < 5; i += 1) {
+	if (i >= 2) {
+		trace(arr[i]);
+	}
+	if (i == 4) continue;
+}
+```
+
 ## Output
 
 Your same code, as seen by the compiler (with original comments removed and some comments annotating context inserted).

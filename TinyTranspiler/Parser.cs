@@ -43,18 +43,27 @@ namespace TinyTranspiler {
 		void add(Token tk) {
 			tokens.Add(tk);
 		}
+
+		/// <summary>
+		/// `+` => BinOp, `+=` => SetOp
+		/// </summary>
 		void readBinOp(Token.Pos tp, Token.BinOpType op) {
 			if (pos < len && code[pos] == '=') {
 				pos++;
 				add(new Token.SetOp(tp, op));
 			} else add(new Token.BinOp(tp, op));
 		}
+
+		/// <summary>
+		/// Reading `<` or `<=` accordingly
+		/// </summary>
 		void readCmpOp(Token.Pos tp, Token.BinOpType opEq, Token.BinOpType op) {
 			if (pos < len && code[pos] == '=') {
 				pos++;
 				add(new Token.BinOp(tp, opEq));
 			} else add(new Token.BinOp(tp, op));
 		}
+
 		void readNumber(Token.Pos tp, char first) {
 			var seenDot = first == '.';
 			while (pos < len) {
@@ -69,6 +78,7 @@ namespace TinyTranspiler {
 			}
 			add(new Token.Number(tp, slice(tp.pos, pos)));
 		}
+
 		public List<Token> parse(Source _source) {
 			tokens = new List<Token>();
 			source = _source;
